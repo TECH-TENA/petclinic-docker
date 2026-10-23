@@ -1,0 +1,133 @@
+name: Kunballi PetClinic CI/CD
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Do not interrupt a deployment halfway through replacing the application.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.image.outputs.name }}@${{ steps.build.outputs.digest }}
+
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Set the image name
+        id: image
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/kunballi-petclinic" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+
+      - name: Log in to GitHub Container Registry
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+
+      - name: Build, test, and publish the image
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: .
+          file: Dockerfile.multi
+          target: production
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ steps.image.outputs.name }}:sha-${{ github.sha }}
+            ${{ steps.image.outputs.name }}:latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=kunballi-petclinic
+          cache-to: type=gha,mode=max,scope=kunballi-petclinic
+
+  deploy:
+    if: github.ref == 'refs/heads/main' && vars.PETCLINIC_DEPLOY_ENABLED == 'true'
+    needs: build
+    runs-on: [self-hosted, linux, x64, kunballi-petclinic]
+    timeout-minutes: 15
+    environment: staging
+    permissions:
+      packages: read
+    env:
+      APP_IMAGE: ${{ needs.build.outputs.image }}
+      DEPLOY_DIR: ${{ vars.PETCLINIC_DEPLOY_DIR || '/opt/kunballi-petclinic' }}
+
+    steps:
+      # Application data and writable topology files live outside the runner checkout.
+      - name: Check the VM deployment folder
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v docker >/dev/null
+          command -v curl >/dev/null
+          docker info >/dev/null
+          docker compose version
+          if [[ ! -f "$DEPLOY_DIR/docker-compose.yml" || ! -s "$DEPLOY_DIR/.env" ]]; then
+            echo 'Prepare the VM folder and .env using README-cicd.md before enabling deployment.' >&2
+            exit 1
+          fi
+          cd -- "$DEPLOY_DIR"
+          for index in 0 1 2; do
+            if [[ ! -f "redis-$index/redis.conf" || ! -f "sentinel-$index/sentinel.conf" ]]; then
+              echo "Missing Redis or Sentinel configuration for instance $index." >&2
+              exit 1
+            fi
+          done
+          docker compose config --quiet
+          if ! docker compose config --images | grep -Fxq -- "$APP_IMAGE"; then
+            echo 'The VM Compose file must use image: ${APP_IMAGE:-kunballi-petclinic}.' >&2
+            exit 1
+          fi
+
+      - name: Pull and deploy the tested image
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          registry_config="$(mktemp -d "${RUNNER_TEMP:?}/petclinic-registry.XXXXXX")"
+          cleanup() {
+            docker --config "$registry_config" logout ghcr.io >/dev/null 2>&1 || true
+            rm -f -- "$registry_config/config.json"
+            rmdir -- "$registry_config" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          printf '%s' "$GHCR_TOKEN" | docker --config "$registry_config" login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          docker --config "$registry_config" pull "$APP_IMAGE"
+          cd -- "$DEPLOY_DIR"
+          previous_image="$(docker inspect --format '{{.Config.Image}}' petclinic-api 2>/dev/null || true)"
+          docker compose up -d --no-build --wait --wait-timeout 240
+          curl --fail --silent --show-error http://127.0.0.1:8000/actuator/health >/dev/null
+          if [[ -n "$previous_image" && "$previous_image" != "$APP_IMAGE" ]]; then
+            printf '%s\n' "$previous_image" > .previous-image
+          fi
+          printf '%s\n' "$APP_IMAGE" > .deployed-image
+          docker compose ps
+          echo "Successfully deployed $APP_IMAGE"

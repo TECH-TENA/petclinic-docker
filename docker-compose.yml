@@ -1,0 +1,178 @@
+services:
+  petclinic-api:
+    container_name: petclinic-api
+    build:
+      context: .
+      dockerfile: Dockerfile.multi
+      target: production
+    image: ${APP_IMAGE:-kunballi-petclinic}
+    restart: unless-stopped
+    environment:
+      SERVER_PORT: 8080
+      SPRING_PROFILES_ACTIVE: mysql,redis
+      MYSQL_URL: "jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-petclinic}?useSSL=false&allowPublicKeyRetrieval=true"
+      MYSQL_USER: ${MYSQL_USER:-petclinic}
+      MYSQL_PASS: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
+      SPRING_REDIS_SENTINEL_MASTER: mymaster
+      SPRING_REDIS_SENTINEL_NODES: sentinel-0:26379,sentinel-1:26379,sentinel-2:26379
+    networks:
+      - petclinic-network
+    ports:
+      - "127.0.0.1:8000:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      sentinel-0:
+        condition: service_healthy
+      sentinel-1:
+        condition: service_healthy
+      sentinel-2:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+
+  mysql:
+    container_name: petclinic-db
+    restart: unless-stopped
+    image: mysql:8
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}
+      MYSQL_USER: ${MYSQL_USER:-petclinic}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-petclinic}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - petclinic-network
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'MYSQL_PWD="$${MYSQL_PASSWORD}" mysql --protocol=TCP -h 127.0.0.1 -u "$${MYSQL_USER}" "$${MYSQL_DATABASE}" -e "SELECT 1" >/dev/null 2>&1'
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+
+  redis-0:
+    container_name: petclinic-redis-0
+    restart: unless-stopped
+    image: redis:4.0.2
+    volumes:
+      - ./redis-0:/etc/redis
+    networks:
+      - petclinic-network
+    command: ["redis-server", "/etc/redis/redis.conf"]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep -qx PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  redis-1:
+    container_name: petclinic-redis-1
+    restart: unless-stopped
+    image: redis:4.0.2
+    volumes:
+      - ./redis-1:/etc/redis
+    networks:
+      - petclinic-network
+    command: ["redis-server", "/etc/redis/redis.conf"]
+    depends_on:
+      redis-0:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep -qx PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  redis-2:
+    container_name: petclinic-redis-2
+    restart: unless-stopped
+    image: redis:4.0.2
+    volumes:
+      - ./redis-2:/etc/redis
+    networks:
+      - petclinic-network
+    command: ["redis-server", "/etc/redis/redis.conf"]
+    depends_on:
+      redis-0:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep -qx PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  sentinel-0:
+    image: redis:alpine
+    container_name: sentinel-0
+    restart: unless-stopped
+    command: ["redis-sentinel", "/etc/redis/sentinel.conf"]
+    volumes:
+      - ./sentinel-0:/etc/redis
+    networks:
+      - petclinic-network
+    depends_on:
+      redis-0:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -p 26379 SENTINEL ckquorum mymaster | grep -q '^OK'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  sentinel-1:
+    image: redis:alpine
+    container_name: sentinel-1
+    restart: unless-stopped
+    command: ["redis-sentinel", "/etc/redis/sentinel.conf"]
+    volumes:
+      - ./sentinel-1:/etc/redis
+    networks:
+      - petclinic-network
+    depends_on:
+      redis-0:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -p 26379 SENTINEL ckquorum mymaster | grep -q '^OK'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  sentinel-2:
+    image: redis:alpine
+    container_name: sentinel-2
+    restart: unless-stopped
+    command: ["redis-sentinel", "/etc/redis/sentinel.conf"]
+    volumes:
+      - ./sentinel-2:/etc/redis
+    networks:
+      - petclinic-network
+    depends_on:
+      redis-0:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -p 26379 SENTINEL ckquorum mymaster | grep -q '^OK'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+networks:
+  petclinic-network:
+    name: petclinic-network
+
+volumes:
+  mysql_data:
+    external: true
+    name: ${MYSQL_DATA_VOLUME:-petclinic-mysql-data}
