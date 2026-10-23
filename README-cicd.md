@@ -80,8 +80,26 @@ docker compose config --quiet
 Keep all six folders (`redis-0`, `redis-1`, `redis-2`, `sentinel-0`, `sentinel-1`,
 `sentinel-2`) and their real `.conf` files in this VM checkout. They must be
 writable by the container users: Redis and Sentinel rewrite configuration when
-topology changes. Verify directory ownership on Linux; do not make everything
-world-writable. See README-local.md for what each configuration does.
+topology changes. A normal Git checkout belongs to your Ubuntu user, which may
+not match the Redis image's user. On this dedicated VM, determine the image
+users and give them ownership of their own configuration directories/files:
+
+```bash
+docker pull redis:4.0.2
+docker pull redis:alpine
+REDIS_UID="$(docker run --rm --entrypoint id redis:4.0.2 -u redis)"
+REDIS_GID="$(docker run --rm --entrypoint id redis:4.0.2 -g redis)"
+SENTINEL_UID="$(docker run --rm --entrypoint id redis:alpine -u redis)"
+SENTINEL_GID="$(docker run --rm --entrypoint id redis:alpine -g redis)"
+for index in 0 1 2; do
+  sudo chown "$REDIS_UID:$REDIS_GID" "redis-$index" "redis-$index/redis.conf"
+  sudo chown "$SENTINEL_UID:$SENTINEL_GID" "sentinel-$index" "sentinel-$index/sentinel.conf"
+done
+```
+
+Run these only from `/opt/kunballi-petclinic` on the VM, not on the laptop or
+someone else's deployment. Do not make everything world-writable.
+See README-local.md for what each configuration does.
 
 This creates a fresh VM database; it does not migrate records from your laptop.
 If the VM already has PetClinic data, identify its existing volume and credentials
