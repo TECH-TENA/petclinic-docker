@@ -1,0 +1,496 @@
+warning: in the working copy of '.github/actionlint.yaml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.github/workflows/maven-build.yml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.github/workflows/petclinic-cicd.yml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'README-cicd.md', LF will be replaced by CRLF the next time Git touches it
+[1mdiff --git a/.github/actionlint.yaml b/.github/actionlint.yaml[m
+[1mindex ea4d972..7cc26bb 100644[m
+[1m--- a/.github/actionlint.yaml[m
+[1m+++ b/.github/actionlint.yaml[m
+[36m@@ -1,3 +1,3 @@[m
+ self-hosted-runner:[m
+   labels:[m
+[31m-    - kunballi-petclinic[m
+[32m+[m[32m    - kunballi[m
+[1mdiff --git a/.github/workflows/maven-build.yml b/.github/workflows/maven-build.yml[m
+[1mindex 7663751..b15caf6 100644[m
+[1m--- a/.github/workflows/maven-build.yml[m
+[1m+++ b/.github/workflows/maven-build.yml[m
+[36m@@ -22,15 +22,5 @@[m [mjobs:[m
+         with:[m
+           persist-credentials: false[m
+ [m
+[31m-      - name: Set up Docker Buildx[m
+[31m-        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4[m
+[31m-[m
+       - name: Compile and run the Maven tests[m
+[31m-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7[m
+[31m-        with:[m
+[31m-          context: .[m
+[31m-          file: Dockerfile.multi[m
+[31m-          target: build[m
+[31m-          push: false[m
+[31m-          cache-from: type=gha,scope=kunballi-petclinic[m
+[31m-          cache-to: type=gha,mode=max,scope=kunballi-petclinic[m
+[32m+[m[32m        run: docker build -f Dockerfile.multi --target build .[m
+[1mdiff --git a/.github/workflows/petclinic-cicd.yml b/.github/workflows/petclinic-cicd.yml[m
+[1mindex b0e0cb9..46f7bcf 100644[m
+[1m--- a/.github/workflows/petclinic-cicd.yml[m
+[1m+++ b/.github/workflows/petclinic-cicd.yml[m
+[36m@@ -8,9 +8,15 @@[m [mon:[m
+ permissions:[m
+   contents: read[m
+ [m
+[31m-# Do not interrupt a deployment halfway through replacing the application.[m
+[32m+[m[32mdefaults:[m
+[32m+[m[32m  run:[m
+[32m+[m[32m    shell: bash[m
+[32m+[m
+[32m+[m[32menv:[m
+[32m+[m[32m  IMAGE_NAME: docker.io/${{ vars.DOCKERHUB_USERNAME }}/kunballi-petclinic[m
+[32m+[m
+ concurrency:[m
+[31m-  group: ${{ github.workflow }}-${{ github.ref }}[m
+[32m+[m[32m  group: kunballi-petclinic-deployment[m
+   cancel-in-progress: false[m
+ [m
+ jobs:[m
+[36m@@ -18,110 +24,60 @@[m [mjobs:[m
+     if: github.ref == 'refs/heads/main'[m
+     runs-on: ubuntu-latest[m
+     timeout-minutes: 30[m
+[31m-    permissions:[m
+[31m-      contents: read[m
+[31m-      packages: write[m
+[31m-    outputs:[m
+[31m-      image: ${{ steps.image.outputs.name }}@${{ steps.build.outputs.digest }}[m
+[31m-[m
+     steps:[m
+       - name: Check out the code[m
+         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6[m
+         with:[m
+           persist-credentials: false[m
+ [m
+[31m-      - name: Set the image name[m
+[31m-        id: image[m
+[31m-        shell: bash[m
+[31m-        run: |[m
+[31m-          set -euo pipefail[m
+[31m-          echo "name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/kunballi-petclinic" >> "$GITHUB_OUTPUT"[m
+[31m-[m
+[31m-      - name: Set up Docker Buildx[m
+[31m-        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4[m
+[31m-[m
+[31m-      - name: Log in to GitHub Container Registry[m
+[31m-        env:[m
+[31m-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}[m
+[31m-        shell: bash[m
+[31m-        run: |[m
+[31m-          set -euo pipefail[m
+[31m-          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin[m
+[32m+[m[32m      - name: Log in to Docker Hub[m
+[32m+[m[32m        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4[m
+[32m+[m[32m        with:[m
+[32m+[m[32m          username: ${{ vars.DOCKERHUB_USERNAME }}[m
+[32m+[m[32m          password: ${{ secrets.DOCKERHUB_TOKEN }}[m
+ [m
+       - name: Build, test, and publish the image[m
+[31m-        id: build[m
+[31m-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7[m
+[31m-        with:[m
+[31m-          context: .[m
+[31m-          file: Dockerfile.multi[m
+[31m-          target: production[m
+[31m-          platforms: linux/amd64[m
+[31m-          push: true[m
+[31m-          tags: |[m
+[31m-            ${{ steps.image.outputs.name }}:sha-${{ github.sha }}[m
+[31m-            ${{ steps.image.outputs.name }}:latest[m
+[31m-          labels: |[m
+[31m-            org.opencontainers.image.source=https://github.com/${{ github.repository }}[m
+[31m-            org.opencontainers.image.revision=${{ github.sha }}[m
+[31m-          cache-from: type=gha,scope=kunballi-petclinic[m
+[31m-          cache-to: type=gha,mode=max,scope=kunballi-petclinic[m
+[32m+[m[32m        run: |[m
+[32m+[m[32m          docker build -f Dockerfile.multi --target production -t "$IMAGE_NAME:sha-$GITHUB_SHA" -t "$IMAGE_NAME:latest" .[m
+[32m+[m[32m          docker push "$IMAGE_NAME:sha-$GITHUB_SHA"[m
+[32m+[m[32m          docker push "$IMAGE_NAME:latest"[m
+ [m
+   deploy:[m
+     if: github.ref == 'refs/heads/main' && vars.PETCLINIC_DEPLOY_ENABLED == 'true'[m
+     needs: build[m
+[31m-    runs-on: [self-hosted, linux, x64, kunballi-petclinic][m
+[32m+[m[32m    runs-on: [self-hosted, linux, x64, kunballi][m
+     timeout-minutes: 15[m
+[31m-    environment: staging[m
+[31m-    permissions:[m
+[31m-      packages: read[m
+[32m+[m[32m    permissions: {}[m
+     env:[m
+[31m-      APP_IMAGE: ${{ needs.build.outputs.image }}[m
+[31m-      DEPLOY_DIR: ${{ vars.PETCLINIC_DEPLOY_DIR || '/opt/kunballi-petclinic' }}[m
+[32m+[m[32m      APP_IMAGE: docker.io/${{ vars.DOCKERHUB_USERNAME }}/kunballi-petclinic:sha-${{ github.sha }}[m
+ [m
+     steps:[m
+[31m-      # Application data and writable topology files live outside the runner checkout.[m
+       - name: Check the VM deployment folder[m
+[31m-        shell: bash[m
+         run: |[m
+[31m-          set -euo pipefail[m
+[31m-          command -v docker >/dev/null[m
+           command -v curl >/dev/null[m
+           docker info >/dev/null[m
+[31m-          docker compose version[m
+[31m-          if [[ ! -f "$DEPLOY_DIR/docker-compose.yml" || ! -s "$DEPLOY_DIR/.env" ]]; then[m
+[31m-            echo 'Prepare the VM folder and .env using README-cicd.md before enabling deployment.' >&2[m
+[31m-            exit 1[m
+[31m-          fi[m
+[31m-          cd -- "$DEPLOY_DIR"[m
+[32m+[m[32m          cd "$HOME/petclinic-docker"[m
+[32m+[m[32m          test -s .env[m
+           for index in 0 1 2; do[m
+[31m-            if [[ ! -f "redis-$index/redis.conf" || ! -f "sentinel-$index/sentinel.conf" ]]; then[m
+[31m-              echo "Missing Redis or Sentinel configuration for instance $index." >&2[m
+[31m-              exit 1[m
+[31m-            fi[m
+[32m+[m[32m            test -f "redis-$index/redis.conf"[m
+[32m+[m[32m            test -f "sentinel-$index/sentinel.conf"[m
+           done[m
+           docker compose config --quiet[m
+[31m-          if ! docker compose config --images | grep -Fxq -- "$APP_IMAGE"; then[m
+[31m-            echo 'The VM Compose file must use image: ${APP_IMAGE:-kunballi-petclinic}.' >&2[m
+[31m-            exit 1[m
+[31m-          fi[m
+[32m+[m[32m          docker compose config --images | grep -Fx -- "$APP_IMAGE"[m
+ [m
+[31m-      - name: Pull and deploy the tested image[m
+[32m+[m[32m      - name: Log in to pull from Docker Hub[m
+[32m+[m[32m        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4[m
+         env:[m
+[31m-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}[m
+[31m-        shell: bash[m
+[32m+[m[32m          DOCKER_CONFIG: ${{ runner.temp }}/petclinic-registry[m
+[32m+[m[32m        with:[m
+[32m+[m[32m          username: ${{ vars.DOCKERHUB_USERNAME }}[m
+[32m+[m[32m          password: ${{ secrets.DOCKERHUB_READ_TOKEN }}[m
+[32m+[m
+[32m+[m[32m      - name: Deploy the application[m
+         run: |[m
+[31m-          set -euo pipefail[m
+[32m+[m[32m          cd "$HOME/petclinic-docker"[m
+           umask 077[m
+[31m-          registry_config="$(mktemp -d "${RUNNER_TEMP:?}/petclinic-registry.XXXXXX")"[m
+[31m-          cleanup() {[m
+[31m-            docker --config "$registry_config" logout ghcr.io >/dev/null 2>&1 || true[m
+[31m-            rm -f -- "$registry_config/config.json"[m
+[31m-            rmdir -- "$registry_config" 2>/dev/null || true[m
+[31m-          }[m
+[31m-          trap cleanup EXIT[m
+[31m-          printf '%s' "$GHCR_TOKEN" | docker --config "$registry_config" login ghcr.io --username "$GITHUB_ACTOR" --password-stdin[m
+[31m-          docker --config "$registry_config" pull "$APP_IMAGE"[m
+[31m-          cd -- "$DEPLOY_DIR"[m
+[32m+[m[32m          docker --config "$RUNNER_TEMP/petclinic-registry" pull "$APP_IMAGE"[m
+           previous_image="$(docker inspect --format '{{.Config.Image}}' petclinic-api 2>/dev/null || true)"[m
+           docker compose up -d --no-build --wait --wait-timeout 240[m
+           curl --fail --silent --show-error http://127.0.0.1:8000/actuator/health >/dev/null[m
+[36m@@ -130,4 +86,3 @@[m [mjobs:[m
+           fi[m
+           printf '%s\n' "$APP_IMAGE" > .deployed-image[m
+           docker compose ps[m
+[31m-          echo "Successfully deployed $APP_IMAGE"[m
+[1mdiff --git a/README-cicd.md b/README-cicd.md[m
+[1mindex d52f827..ed81c41 100644[m
+[1m--- a/README-cicd.md[m
+[1m+++ b/README-cicd.md[m
+[36m@@ -1,25 +1,56 @@[m
+[31m-# PetClinic CI/CD with GitHub Container Registry[m
+[32m+[m[32m# PetClinic CI/CD with Docker Hub and an AWS VM runner[m
+ [m
+ ## What this prepares[m
+ [m
+ ```text[m
+[31m-Push to main -> GitHub-hosted runner builds and tests -> GHCR stores image[m
+[31m-             -> your Ubuntu VM runner pulls that exact image -> Compose starts PetClinic[m
+[32m+[m[32mPush to main -> GitHub-hosted runner builds and tests -> Docker Hub stores image[m
+[32m+[m[32m             -> your AWS Ubuntu VM runner pulls that exact image -> Compose starts PetClinic[m
+ ```[m
+ [m
+[31m-The image is named `ghcr.io/<github-owner>/kunballi-petclinic`. Each successful[m
+[31m-build publishes `sha-<full-commit-id>` and `latest` tags. Deployment uses the[m
+[31m-image digest, not the moving `latest` tag, so it runs exactly what was built.[m
+[32m+[m[32mThe image is named `docker.io/<dockerhub-username>/kunballi-petclinic`. Each successful[m
+[32m+[m[32mbuild publishes `sha-<full-commit-id>` and `latest` tags. Deployment pulls the[m
+[32m+[m[32mcommit tag instead of the moving `latest` tag. Tags can be overwritten in Docker[m
+[32m+[m[32mHub, so do not manually replace a published commit tag with a different image.[m
+ The existing Dockerfile runs the Maven tests before creating the final image.[m
+ Pull requests run build/tests only, on a GitHub-hosted runner, without publishing[m
+ an image or running deployment on your VM.[m
+ [m
+ No VM is created or registered by these files. Deployment is disabled until[m
+ you explicitly set `PETCLINIC_DEPLOY_ENABLED` to `true` in GitHub.[m
+[31m-The project folder also needs to be connected and pushed to a GitHub repository;[m
+[31m-creating workflow files alone does not connect it to GitHub.[m
+[32m+[m[32mThe GitHub repository is `TECH-TENA/petclinic-docker`. Commit and push these[m
+[32m+[m[32mworkflow changes to `main` when the configuration below is ready.[m
+ [m
+[31m-## 1. Prepare a dedicated Ubuntu VM[m
+[32m+[m[32m## 1. Connect to your AWS Ubuntu VM[m
+[32m+[m
+[32m+[m[32mUse an existing, dedicated EC2 instance. These commands assume its operating[m
+[32m+[m[32msystem is Ubuntu and its architecture is x64. They are not Amazon Linux commands.[m
+[32m+[m[32mOn your laptop, open Git Bash and connect using your actual private key filename[m
+[32m+[m[32mand the instance's current public address. The key does not have to end in `.pem`:[m
+[32m+[m
+[32m+[m[32m```bash[m
+[32m+[m[32mssh -i "/c/path/to/YOUR_PRIVATE_KEY" ubuntu@YOUR_EC2_PUBLIC_IP[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32mAfter logging in, run these on the VM:[m
+[32m+[m
+[32m+[m[32m```bash[m
+[32m+[m[32mcat /etc/os-release[m
+[32m+[m[32muname -m[m
+[32m+[m[32mwhoami[m
+[32m+[m[32mdocker --version[m
+[32m+[m[32mdocker compose version[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32mExpect Ubuntu, `x86_64`, and a non-root username such as `ubuntu`. If the OS is[m
+[32m+[m[32mAmazon Linux, or the architecture is `aarch64`, stop and adapt the setup before[m
+[32m+[m[32mcontinuing. The current workflow builds Linux amd64 images and targets an x64 runner.[m
+[32m+[m
+[32m+[m[32mYour EC2 security group should allow SSH from your own IP, not the entire internet.[m
+[32m+[m[32mThe runner connects outward to GitHub over HTTPS; it does not need a new inbound[m
+[32m+[m[32m"GitHub runner port". Keep outbound connectivity for GitHub, Docker Hub, and package[m
+[32m+[m[32mdownloads. Never open MySQL, Redis, or Sentinel ports to the internet.[m
+[32m+[m
+[32m+[m[32m### Docker prerequisites[m
+ [m
+ Use Ubuntu Linux x64 (not ARM) with Docker Engine, the Docker Compose plugin,[m
+ Git, and curl installed. Follow the official [Docker Ubuntu installation guide](https://docs.docker.com/engine/install/ubuntu/).[m
+[36m@@ -34,33 +65,106 @@[m [mGitHub explains these risks in its [self-hosted runner guide](https://docs.githu[m
+ The following are setup instructions for you to run on the VM, not commands[m
+ executed automatically by this project.[m
+ [m
+[31m-## 2. Register the VM as a runner[m
+[32m+[m[32mIf Docker is already installed, do not replace it blindly. Check its version[m
+[32m+[m[32mand Compose plugin first. For a fresh Ubuntu VM with no conflicting Docker[m
+[32m+[m[32mpackages, follow the linked Docker installation guide, then install Git/curl:[m
+[32m+[m
+[32m+[m[32m```bash[m
+[32m+[m[32msudo apt update[m
+[32m+[m[32msudo apt install -y git curl[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32mFor a dedicated non-root runner user that you trust with root-level Docker access:[m
+[32m+[m
+[32m+[m[32m```bash[m
+[32m+[m[32msudo usermod -aG docker "$(id -un)"[m
+[32m+[m[32mexit[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32mReconnect by SSH so the new group membership takes effect, then check:[m
+[32m+[m
+[32m+[m[32m```bash[m
+[32m+[m[32mdocker info >/dev/null[m
+[32m+[m[32mdocker compose version[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32mBoth must work without sudo before installing the runner service. If a runner[m
+[32m+[m[32mservice was installed before granting Docker access, restart that service after[m
+[32m+[m[32mupdating group membership. Do not use `chmod 666 /var/run/docker.sock`.[m
+ [m
+[31m-In your private GitHub repository, open Settings -> Actions -> Runners ->[m
+[31m-New self-hosted runner. Select Linux and x64. Run the current download and[m
+[31m-registration commands GitHub displays, as a non-root user on the VM.[m
+[31m-Use `kunballi-petclinic-runner` as the runner name and add the custom label[m
+[31m-`kunballi-petclinic`. Keep the default `self-hosted`, `linux`, and `x64` labels.[m
+[32m+[m[32m## 2. Use your existing runner[m
+ [m
+[31m-Install/start the runner as a service using GitHub's displayed instructions,[m
+[31m-and confirm it shows Idle in the repository settings. Keep the runner software[m
+[31m-in its own folder, such as `~/actions-runner`, separate from the application.[m
+[32m+[m[32mUse the runner you registered with the name `kunballi`. Idle means it is online[m
+[32m+[m[32mand waiting for a job; you do not need to register another one.[m
+[32m+[m[32mOpen Settings -> Actions -> Runners -> kunballi -> Labels, and add the custom[m
+[32m+[m[32mlabel `kunballi`. Keep its default `self-hosted`, `Linux`, and `X64` labels.[m
+[32m+[m
+[32m+[m[32mThe runner name and label are separate. A runner called `kunballi` is not[m
+[32m+[m[32mautomatically given a `kunballi` label. The deployment job requires all four[m
+[32m+[m[32mlabels in `runs-on: [self-hosted, linux, x64, kunballi]` to select your VM.[m
+[32m+[m[32mSee GitHub's [runner label instructions](https://docs.github.com/en/actions/how-tos/manage-runners/self-hosted-runners/apply-labels).[m
+[32m+[m
+[32m+[m[32mInstead of leaving `./run.sh` in a foreground SSH session, install it as a[m
+[32m+[m[32mservice so it continues working after you disconnect. If `./run.sh` is already[m
+[32m+[m[32mrunning, stop it with Ctrl+C first. In the runner directory on the VM:[m
+[32m+[m
+[32m+[m[32m```bash[m
+[32m+[m[32mcd ~/actions-runner[m
+[32m+[m[32msudo ./svc.sh install "$(id -un)"[m
+[32m+[m[32msudo ./svc.sh start[m
+[32m+[m[32msudo ./svc.sh status[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32mReturn to Settings -> Actions -> Runners on GitHub. Confirm the runner shows[m
+[32m+[m[32mIdle and has all four required labels. Idle means it is online and waiting[m
+[32m+[m[32mfor work; it is not an error. The EC2 instance and runner service must stay[m
+[32m+[m[32mrunning to pick up deployment jobs. Keep the runner software separate from[m
+[32m+[m[32mthe application folder.[m
+ Never put its registration token, `.runner`, or `.credentials` files in this[m
+ project or share them in chat.[m
+ [m
+[32m+[m[32mTo undo runner registration later, stop and uninstall this specific service[m
+[32m+[m[32mfrom its own runner directory, then use GitHub's removal instructions. Do not[m
+[32m+[m[32mdelete the application folder or database volumes while removing a runner.[m
+[32m+[m
+ ## 3. Prepare the application folder once[m
+ [m
+ Keep the deployed application outside `actions-runner/_work`, which GitHub may[m
+[31m-clean between jobs. These commands assume the logged-in user is the runner user.[m
+[31m-Replace `YOUR_PRIVATE_REPOSITORY_URL` before running the clone command, using[m
+[31m-your normal secure Git authentication; never embed a token in the URL.[m
+[32m+[m[32mclean between jobs. Use `~/petclinic-docker`, beside `~/actions-runner`, not inside[m
+[32m+[m[32mit. These commands assume the logged-in user is the same non-root user that runs[m
+[32m+[m[32mthe runner service. For the Ubuntu user, the application path is[m
+[32m+[m[32m`/home/ubuntu/petclinic-docker`.[m
+[32m+[m
+[32m+[m[32m### Move the existing checkout before the first deployment[m
+[32m+[m
+[32m+[m[32mIf you already cloned into `/opt/kunballi-petclinic`, do not delete or clone it[m
+[32m+[m[32magain. Before starting the application for the first time, move the existing[m
+[32m+[m[32mfolder on the VM. This preserves its `.env`, `.git`, and configuration files:[m
+ [m
+ ```bash[m
+[31m-sudo mkdir -p /opt/kunballi-petclinic[m
+[31m-sudo chown "$(id -un):$(id -gn)" /opt/kunballi-petclinic[m
+[31m-git clone YOUR_PRIVATE_REPOSITORY_URL /opt/kunballi-petclinic[m
+[31m-cd /opt/kunballi-petclinic[m
+[31m-cp .env.example .env[m
+[32m+[m[32msudo mv -nT /opt/kunballi-petclinic "$HOME/petclinic-docker"[m
+[32m+[m[32mcd "$HOME/petclinic-docker"[m
+[32m+[m[32mpwd[m
+[32m+[m[32mls -la[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32mThe `-n` option prevents overwriting an existing destination, and `-T` prevents[m
+[32m+[m[32mnesting the old folder inside another folder. If the destination already exists,[m
+[32m+[m[32mstop and inspect both folders instead of deleting either one. This move does not[m
+[32m+[m[32mdelete Docker volumes. If PetClinic containers have already been created, plan[m
+[32m+[m[32mthe migration first: changing the folder can also change the Compose project[m
+[32m+[m[32mname. Do not move a running deployment using these first-setup instructions.[m
+[32m+[m
+[32m+[m[32m### Clone only if there is no existing checkout[m
+[32m+[m
+[32m+[m[32mUse your normal secure Git authentication; never embed a token in the URL.[m
+[32m+[m[32mOnly run this clone and copy sequence when preparing a new deployment folder.[m
+[32m+[m
+[32m+[m[32m```bash[m
+[32m+[m[32mcd ~[m
+[32m+[m[32mgit clone https://github.com/TECH-TENA/petclinic-docker.git "$HOME/petclinic-docker"[m
+[32m+[m[32mcd "$HOME/petclinic-docker"[m
+[32m+[m[32mcp -n .env.example .env[m
+ chmod 600 .env[m
+ nano .env[m
+ ```[m
+[36m@@ -97,7 +201,7 @@[m [mfor index in 0 1 2; do[m
+ done[m
+ ```[m
+ [m
+[31m-Run these only from `/opt/kunballi-petclinic` on the VM, not on the laptop or[m
+[32m+[m[32mRun these only from `~/petclinic-docker` on the VM, not on the laptop or[m
+ someone else's deployment. Do not make everything world-writable.[m
+ See README-local.md for what each configuration does.[m
+ [m
+[36m@@ -107,23 +211,47 @@[m [minstead of creating/repointing storage blindly. Do not use `down -v` or delete v[m
+ [m
+ ## 4. Enable deployment in GitHub[m
+ [m
+[31m-Create a GitHub environment named `staging` and restrict deployments to `main`.[m
+[31m-For fully automatic deployment after a push, do not require an extra manual[m
+[31m-environment approval; add required reviewers instead if you prefer an approval gate.[m
+[32m+[m[32m### Docker Hub repository and credentials[m
+[32m+[m
+[32m+[m[32mIn Docker Hub, create a repository named `kunballi-petclinic` under your own[m
+[32m+[m[32mDocker Hub username. The username need not match your GitHub username.[m
+[32m+[m[32mCreate an expiring personal access token with Read/Write permissions for the[m
+[32m+[m[32mbuild job, and a separate Read-only token for deployment. Do not grant Delete[m
+[32m+[m[32mpermission when it is not needed. See the official [Docker access-token guide](https://docs.docker.com/security/access-tokens/).[m
+[32m+[m
+[32m+[m[32mUnder GitHub Settings -> Secrets and variables -> Actions -> Secrets, add:[m
+[32m+[m
+[32m+[m[32m| Name | Value | Purpose |[m
+[32m+[m[32m| --- | --- | --- |[m
+[32m+[m[32m| `DOCKERHUB_TOKEN` | Your Read/Write Docker Hub token | The hosted build runner uploads the image. |[m
+[32m+[m[32m| `DOCKERHUB_READ_TOKEN` | Your separate Read-only Docker Hub token | The VM downloads images without registry-write access. |[m
+[32m+[m
+[32m+[m[32mNever put token values in workflow YAML, commit them, or send them in chat.[m
+[32m+[m[32mThe GitHub runner registration token is separate from both Docker Hub tokens.[m
+[32m+[m
+[32m+[m[32mNo GitHub environment needs to be created for this basic workflow. Protect[m
+[32m+[m[32m`main` and review changes before merging. Deployment runs after a successful[m
+[32m+[m[32mmain-branch build, only when the enable variable below is `true`.[m
+ [m
+ Under Settings -> Secrets and variables -> Actions -> Variables, add:[m
+ [m
+ | Name | Value | Purpose |[m
+ | --- | --- | --- |[m
+[32m+[m[32m| `DOCKERHUB_USERNAME` | Your actual lowercase Docker Hub username | The image namespace and Docker Hub login name; this is not a secret. |[m
+ | `PETCLINIC_DEPLOY_ENABLED` | `true` | Enable the VM deploy job only after setup is complete. |[m
+[31m-| `PETCLINIC_DEPLOY_DIR` | `/opt/kunballi-petclinic` | Optional; this is already the default folder. |[m
+ [m
+[31m-No manually created registry token or SSH key secret is needed for this design.[m
+[31m-GitHub supplies `GITHUB_TOKEN`; the build job has package-write permission and[m
+[31m-the deployment job has package-read permission. The self-hosted runner executes[m
+[31m-commands directly on the VM, so deployment does not need to SSH into it.[m
+[31m-The GHCR package must grant this repository access; a package with the same name[m
+[31m-previously published from another repository may need its access settings corrected.[m
+[32m+[m[32mThe self-hosted runner executes commands directly on the VM, so no SSH key[m
+[32m+[m[32msecret or AWS access keys are needed by this deployment workflow. Docker Hub[m
+[32m+[m[32mauthentication uses the two tokens above, not `GITHUB_TOKEN`. Keep the username[m
+[32m+[m[32min Variables and the tokens in Secrets. The Docker login action logs out after[m
+[32m+[m[32mthe job finishes. The VM uses a temporary Docker authentication directory rather[m
+[32m+[m[32mthan replacing the runner user's usual Docker login.[m
+[32m+[m
+[32m+[m[32mThe deployment folder is `~/petclinic-docker` under the runner service user's[m
+[32m+[m[32mhome directory. The workflow uses `cd "$HOME/petclinic-docker"` for both checks[m
+[32m+[m[32mand deployment. Commit and push this workflow change before testing the new path.[m
+[32m+[m[32mThe older `PETCLINIC_DEPLOY_DIR` variable and `staging` environment are no longer[m
+[32m+[m[32mused by this workflow; do not add them as prerequisites.[m
+ [m
+ ## 5. Trigger and check the pipeline[m
+ [m
+[36m@@ -135,7 +263,7 @@[m [mcheck that the VM runner is online and has all four required labels.[m
+ On the VM, inspect the running stack without printing secrets:[m
+ [m
+ ```bash[m
+[31m-cd /opt/kunballi-petclinic[m
+[32m+[m[32mcd "$HOME/petclinic-docker"[m
+ APP_IMAGE="$(cat .deployed-image)" docker compose ps[m
+ curl -fsS http://127.0.0.1:8000/actuator/health[m
+ ```[m
+[36m@@ -164,7 +292,7 @@[m [mhealth endpoint. A failure marks the job failed; it does not mean Docker reverte[m
+ the application. Inspect health/events before making another change. New pushes[m
+ do not cancel a deployment already running, avoiding interruption halfway through.[m
+ [m
+[31m-After a successful update, `.deployed-image` records the deployed digest and[m
+[32m+[m[32mAfter a successful update, `.deployed-image` records the deployed image tag and[m
+ `.previous-image` records the previous container image, when one existed. These[m
+ files contain image names, not passwords. Before rollback, also check whether the[m
+ new application changed the database schema; restoring an image cannot undo that.[m
+[36m@@ -172,7 +300,7 @@[m [mnew application changed the database schema; restoring an image cannot undo that[m
+ For a previous successful deployment whose image is still present locally:[m
+ [m
+ ```bash[m
+[31m-cd /opt/kunballi-petclinic[m
+[32m+[m[32mcd "$HOME/petclinic-docker"[m
+ PREVIOUS_IMAGE="$(cat .previous-image)"[m
+ APP_IMAGE="$PREVIOUS_IMAGE" docker compose up -d --no-build --no-deps --pull never --wait --wait-timeout 240 petclinic-api[m
+ curl -fsS http://127.0.0.1:8000/actuator/health[m
+[36m@@ -181,7 +309,7 @@[m [mprintf '%s\n' "$PREVIOUS_IMAGE" > .deployed-image[m
+ [m
+ If an update failed before recording `.previous-image`, use the last successful[m
+ image recorded in `.deployed-image` instead. If an older image has been removed,[m
+[31m-authenticate securely to GHCR and pull its recorded digest before rollback.[m
+[32m+[m[32mauthenticate securely to Docker Hub and pull its recorded image before rollback.[m
+ Never delete database volumes to recover from a bad application image.[m
+ [m
+ ## Limits[m
